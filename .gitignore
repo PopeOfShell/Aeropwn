@@ -1,0 +1,17 @@
+# Aeropwn — output files generated at runtime, never commit these
+networks_in_range.json
+networks_in_range-01.*
+capture_*.cap
+capture_*.csv
+capture_*.kismet.csv
+capture_*.kismet.netxml
+capture_*.log.csv
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# OS
+.DS_Store
+Thumbs.db
