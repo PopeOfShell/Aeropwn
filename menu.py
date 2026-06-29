@@ -31,7 +31,7 @@ def banner(macchanger_switch):
 
 def menu():
     banner(macchanger_switch)
-    print(f"{C}[1]{X} Start Attack")
+    print(f"{C}[1]{X} Deauth Loop Attack")
     print(f"{C}[2]{X} MAC Spoofing")
     print(f"{C}[0]{X} Exit")
     select = input("\n> ").strip()
