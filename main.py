@@ -6,6 +6,7 @@ import csv
 import json
 import os
 import menu
+import dependency
 
 
 
@@ -121,6 +122,8 @@ def scanning(interface_name):
 
         all_networks.sort(key=lambda x: x["power"], reverse=True)
 
+        os.system("clear")
+
         network_id = 1
         for net in all_networks:
             print(f"[{network_id:>3}] | {net['key']:<28} | CH:{net['channel']:>3} | PWR:{net['power']:>4} | BSSID:{net['bssid']} | {net['auth']}")
@@ -138,57 +141,18 @@ def scanning(interface_name):
         else:
             print("Failed to clear .csv files after airodump, please do it manually")
 
-def attack(interface_name):
-    attack_time = int(input("Select attack time in secounds for each network\n"))
+def attack(interface_name, attack_time, selected_networks, captured_bssids, successful_handshakes):
 
-    #load network list from json file
-    with open("networks_in_range.json", "r", encoding="utf-8") as json_file:
-        networks = json.load(json_file)
+    # filter out already captured networks for this pass
+    remaining = [net for net in selected_networks if net["bssid"] not in captured_bssids]
 
-    # display available networks
-    print("\nAvailable networks for attack:")
-    for idx, net in enumerate(networks):
-        print(f"[{idx + 1:>3}] | {net['key']:<28} | CH:{net['channel']:>3} | PWR:{net['power']:>4} | BSSID:{net['bssid']} | {net['auth']}")
-
-    # select networks by number or 'all'
-    raw_selection = input("\nSelect networks to attack (numbers separated by commas, or 'all'): ").strip()
-
-    if raw_selection.lower() == "all":
-        selected_networks = networks
-    else:
-        selected_networks = []
-        for token in raw_selection.split(","):
-            token = token.strip()
-            if token.isdigit():
-                idx = int(token) - 1
-                if 0 <= idx < len(networks):
-                    selected_networks.append(networks[idx])
-                else:
-                    print(f"[WARN] Number {token} out of range, skipping")
-            else:
-                print(f"[WARN] '{token}' is not a number, skipping")
-
-    if not selected_networks:
-        print("No networks selected. Exiting.")
+    if not remaining:
+        print("All selected networks already have captured handshakes.")
         return
 
-    # confirm selection before attacking
-    print(f"\nSelected {len(selected_networks)} network(s) for attack:")
-    for net in selected_networks:
-        print(f"  - {net['key']:<28} | BSSID:{net['bssid']}")
+    print(f"\n[PASS] Attacking {len(remaining)} remaining network(s) (skipping {len(captured_bssids)} already captured):")
 
-    confirm = input("\nAre you sure you want to start the attack? [yes/no]: ").strip().lower()
-    if confirm != "yes":
-        print("Attack cancelled.")
-        return
-
-    #set of bssids with already captured handshakes - skipped in further iterations
-    captured_bssids = set()
-    #list of successfully captured handshakes for final summary
-    successful_handshakes = []
-
-    for i in range(len(selected_networks)):
-        net     = selected_networks[i]
+    for i, net in enumerate(remaining):
         bssid   = net["bssid"]
         channel = net["channel"]
         key     = net["key"]
@@ -198,7 +162,7 @@ def attack(interface_name):
             print(f"[SKIP] {key} ({bssid}) - handshake already captured, skipping")
             continue
 
-        print(f"\n[{i + 1}/{len(selected_networks)}] Attacking: {key:<28} | CH:{channel:>3} | BSSID:{bssid}")
+        print(f"\n[{i + 1}/{len(remaining)}] Attacking: {key:<28} | CH:{channel:>3} | BSSID:{bssid}")
 
         safe_key = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in key)
         output_prefix = f"capture_{safe_key}"
@@ -254,13 +218,18 @@ def attack(interface_name):
         else:
             print(f"[MISS] .cap file was not created for {key} ({bssid})")
 
-    #print results summary after attack loop finishes
+    # print pass summary
     print("\n=== Attack summary ===")
     if successful_handshakes:
         for h in successful_handshakes:
             print(f"[+] {h['key']:<28} | BSSID:{h['bssid']} | File: {h['cap']}")
     else:
         print("No handshakes captured")
+
+    print(f"\nAvailable networks for attack:")
+    for idx, net in enumerate(selected_networks):
+        status = "[captured]" if net["bssid"] in captured_bssids else ""
+        print(f"[{idx + 1:>3}] | {net['key']:<28} | CH:{net['channel']:>3} | PWR:{net['power']:>4} | BSSID:{net['bssid']} | {net['auth']} {status}")
 
 
 def change_mac(interface_name):
@@ -287,9 +256,10 @@ def change_mac(interface_name):
 #=======MAIN========
 #===================
 menu.macchanger_switch = False
+dependency.dependency_check()
 while True:
-    mode_select = menu.menu()
 
+    mode_select = menu.menu()
 
     if mode_select == 0:
         print("Exiting. Goodbye.")
@@ -306,8 +276,55 @@ while True:
 
         scanning(selected_interface)
 
+        attack_time = int(input("Select attack time in seconds for each network\n"))
+
+        # load and select networks ONCE before the attack loop
+        with open("networks_in_range.json", "r", encoding="utf-8") as json_file:
+            networks = json.load(json_file)
+
+        os.system("clear")
+
+        print("\nAvailable networks for attack:")
+        for idx, net in enumerate(networks):
+            print(f"[{idx + 1:>3}] | {net['key']:<28} | CH:{net['channel']:>3} | PWR:{net['power']:>4} | BSSID:{net['bssid']} | {net['auth']}")
+
+        raw_selection = input("\nSelect networks to attack (numbers separated by commas, or 'all'): ").strip()
+        if raw_selection.lower() == "all":
+            selected_networks = networks
+        else:
+            selected_networks = []
+            for token in raw_selection.split(","):
+                token = token.strip()
+                if token.isdigit():
+                    idx = int(token) - 1
+                    if 0 <= idx < len(networks):
+                        selected_networks.append(networks[idx])
+                    else:
+                        print(f"[WARN] Number {token} out of range, skipping")
+                else:
+                    print(f"[WARN] '{token}' is not a number, skipping")
+
+        if not selected_networks:
+            print("No networks selected. Returning to menu.")
+            continue
+
+        os.system("clear")
+
+        print(f"\nSelected {len(selected_networks)} network(s) for attack:")
+        for net in selected_networks:
+            print(f"  - {net['key']:<28} | BSSID:{net['bssid']}")
+
+        confirm = input("\nAre you sure you want to start the attack? [yes/no]: ").strip().lower()
+        if confirm != "yes":
+            print("Attack cancelled.")
+            continue
+
+        # persistent state across all passes
+        captured_bssids = set()
+        successful_handshakes = []
+
         while True:
-            attack(selected_interface)
+            attack(selected_interface, attack_time, selected_networks, captured_bssids, successful_handshakes)
     #macchanger mode
     elif mode_select == 2:
         
