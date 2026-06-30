@@ -165,7 +165,8 @@ def attack(interface_name, attack_time, selected_networks, captured_bssids, succ
         print(f"\n[{i + 1}/{len(remaining)}] Attacking: {key:<28} | CH:{channel:>3} | BSSID:{bssid}")
 
         safe_key = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in key)
-        output_prefix = f"capture_{safe_key}"
+        os.makedirs("PWNED", exist_ok=True)
+        output_prefix = f"PWNED/capture_{safe_key}"
 
         #start airodump-ng to capture handshake on target channel and bssid
         p5 = subprocess.Popen(
